@@ -67,9 +67,20 @@ options =
       "output version information and exit"
   ]
 
-parseArgs :: [String] -> IO (TimeoutOptions, [String])
-parseArgs argv = case getOpt Permute options argv of
-  (o, n, []) -> return (foldl (flip id) defaultOptions o, n)
+parseArgs :: [String] -> IO (TimeoutOptions, String, String, [String])
+parseArgs argv = case getOpt RequireOrder options argv of
+  (o, n, []) -> do
+    let opts = foldl (flip id) defaultOptions o
+    case n of
+      [] -> do
+        hPutStrLn stderr "missing operand"
+        hPutStrLn stderr "Try '--help' for more information."
+        exitFailure
+      [duration] -> do
+        hPutStrLn stderr "missing command"
+        hPutStrLn stderr "Try '--help' for more information."
+        exitFailure
+      duration:cmd:args -> return (opts, duration, cmd, args)
   (_, _, errs) -> do
     hPutStrLn stderr (concat errs)
     hPutStrLn stderr "Try '--help' for more information."
@@ -87,11 +98,15 @@ showVersion = putStrLn "timeout (Haskell implementation) 1.0"
 main :: IO ()
 main = do
   args <- getArgs
-  (opts, nonOpts) <- parseArgs args
+  (opts, duration, cmd, cmdArgs) <- parseArgs args
 
   if optHelp opts
     then showHelp >> exitSuccess
     else
       if optVersion opts
         then showVersion >> exitSuccess
-        else putStrLn $ "Parsed options: " ++ show opts ++ "\nNon-options: " ++ show nonOpts
+        else do
+          putStrLn $ "Duration: " ++ duration
+          putStrLn $ "Command: " ++ cmd
+          putStrLn $ "Arguments: " ++ show cmdArgs
+          putStrLn $ "Options: " ++ show opts

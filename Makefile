@@ -3,9 +3,10 @@ ORMOLU := ormolu
 
 TARGET := timeout
 SRC := timeout.hs
+GHC_FLAGS := -dynamic -Wall
 
 $(TARGET): $(SRC)
-	$(GHC) -o $@ $<
+	$(GHC) $(GHC_FLAGS) -o $@ $<
 
 format:
 	$(ORMOLU) -i $(SRC)
