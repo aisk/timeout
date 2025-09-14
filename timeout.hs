@@ -1,11 +1,11 @@
 module Main where
 
+import Control.Concurrent (forkIO, newEmptyMVar, putMVar, threadDelay, tryTakeMVar)
 import System.Console.GetOpt
 import System.Environment (getArgs, getProgName)
 import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
 import System.IO (hPutStrLn, stderr)
-import System.Process (createProcess, proc, waitForProcess, terminateProcess)
-import Control.Concurrent (forkIO, threadDelay)
+import System.Process (createProcess, proc, terminateProcess, waitForProcess)
 
 data TimeoutOptions = TimeoutOptions
   { optForeground :: Bool,
@@ -123,15 +123,21 @@ main = do
             Just micros -> do
               (_, _, _, ph) <- createProcess (proc cmd cmdArgs)
 
-              -- Start timeout thread
+              timeoutOccurred <- newEmptyMVar
+
               _ <- forkIO $ do
                 threadDelay micros
+                putMVar timeoutOccurred True
                 terminateProcess ph
 
               exitCode <- waitForProcess ph
 
-              -- Check if process was terminated by our timeout
-              case exitCode of
-                ExitSuccess -> exitSuccess
-                ExitFailure 15 -> exitWith (ExitFailure 124)  -- SIGTERM (timeout)
-                ExitFailure code -> exitWith (ExitFailure code)
+              timeoutHappened <- tryTakeMVar timeoutOccurred
+
+              case (timeoutHappened, exitCode) of
+                (Just True, _) ->
+                  if optPreserveStatus opts
+                    then exitWith exitCode
+                    else exitWith (ExitFailure 124)
+                (_, ExitSuccess) -> exitSuccess
+                (_, ExitFailure code) -> exitWith (ExitFailure code)
