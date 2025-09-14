@@ -1,13 +1,14 @@
 module Main where
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, threadDelay, tryTakeMVar)
+import Control.Exception (SomeException, catch)
 import System.Console.GetOpt
 import System.Environment (getArgs, getProgName)
-import System.Exit (ExitCode (..), exitSuccess, exitWith)
+import System.Exit (ExitCode (..), exitWith)
 import System.IO (hPutStrLn, stderr)
-import System.Posix.Signals (Signal, signalProcess, sigTERM, sigKILL, sigINT, sigHUP, sigUSR1, sigUSR2)
-import System.Process (createProcess, proc, waitForProcess, getPid, ProcessHandle)
+import System.Posix.Signals (Signal, sigHUP, sigINT, sigKILL, sigTERM, sigUSR1, sigUSR2, signalProcess)
 import System.Posix.Types (CPid)
+import System.Process (ProcessHandle, createProcess, getPid, proc, waitForProcess)
 
 data TimeoutOptions = TimeoutOptions
   { optForeground :: Bool,
@@ -76,19 +77,10 @@ parseArgs argv = case getOpt RequireOrder options argv of
   (o, n, []) -> do
     let opts = foldl (flip id) defaultOptions o
     case n of
-      [] -> do
-        hPutStrLn stderr "missing operand"
-        hPutStrLn stderr "Try '--help' for more information."
-        exitWith (ExitFailure 125)
-      [_] -> do
-        hPutStrLn stderr "missing command"
-        hPutStrLn stderr "Try '--help' for more information."
-        exitWith (ExitFailure 125)
+      [] -> error "missing operand\nTry '--help' for more information."
+      [_] -> error "missing command\nTry '--help' for more information."
       duration : cmd : args -> return (opts, duration, cmd, args)
-  (_, _, errs) -> do
-    hPutStrLn stderr (concat errs)
-    hPutStrLn stderr "Try '--help' for more information."
-    exitWith (ExitFailure 125)
+  (_, _, errs) -> error (concat errs ++ "\nTry '--help' for more information.")
 
 showHelp :: IO ()
 showHelp = do
@@ -97,7 +89,7 @@ showHelp = do
   putStrLn (usageInfo header options)
 
 showVersion :: IO ()
-showVersion = putStrLn "timeout (Haskell implementation) 1.0"
+showVersion = putStrLn "timeout (Haskell implementation) 0.0.1"
 
 parseDuration :: String -> Maybe Int
 parseDuration s = case reads s of
@@ -124,25 +116,21 @@ getProcessId ph = do
   mpid <- getPid ph
   case mpid of
     Just pid -> return pid
-    Nothing -> do
-      hPutStrLn stderr "Failed to get process ID"
-      exitWith (ExitFailure 125)
+    Nothing -> error "Failed to get process ID"
 
-main :: IO ()
-main = do
+run :: IO ExitCode
+run = do
   args <- getArgs
   (opts, duration, cmd, cmdArgs) <- parseArgs args
 
   if optHelp opts
-    then showHelp >> exitSuccess
+    then showHelp >> return ExitSuccess
     else
       if optVersion opts
-        then showVersion >> exitSuccess
+        then showVersion >> return ExitSuccess
         else do
           case parseDuration duration of
-            Nothing -> do
-              hPutStrLn stderr $ "invalid time interval: '" ++ duration ++ "'"
-              exitWith (ExitFailure 125)
+            Nothing -> error $ "invalid time interval: '" ++ duration ++ "'"
             Just micros -> do
               (_, _, _, ph) <- createProcess (proc cmd cmdArgs)
 
@@ -151,9 +139,8 @@ main = do
               let signal = case optSignal opts of
                     Just sigStr -> case parseSignal sigStr of
                       Just sig -> sig
-                      Nothing -> sigTERM  -- Default to SIGTERM on parse failure
-                    Nothing -> sigTERM    -- Default signal
-
+                      Nothing -> sigTERM
+                    Nothing -> sigTERM
               timeoutOccurred <- newEmptyMVar
 
               _ <- forkIO $ do
@@ -168,7 +155,15 @@ main = do
               case (timeoutHappened, exitCode) of
                 (Just True, _) ->
                   if optPreserveStatus opts
-                    then exitWith exitCode
-                    else exitWith (ExitFailure 124)
-                (_, ExitSuccess) -> exitSuccess
-                (_, ExitFailure code) -> exitWith (ExitFailure code)
+                    then return exitCode
+                    else return (ExitFailure 124)
+                (_, ExitSuccess) -> return ExitSuccess
+                (_, ExitFailure code) -> return (ExitFailure code)
+
+main :: IO ()
+main = do
+  exitCode <-
+    run `catch` \e -> do
+      hPutStrLn stderr (show (e :: SomeException))
+      return (ExitFailure 125)
+  exitWith exitCode
