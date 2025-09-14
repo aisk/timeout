@@ -3,9 +3,11 @@ module Main where
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, threadDelay, tryTakeMVar)
 import System.Console.GetOpt
 import System.Environment (getArgs, getProgName)
-import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
+import System.Exit (ExitCode (..), exitSuccess, exitWith)
 import System.IO (hPutStrLn, stderr)
-import System.Process (createProcess, proc, terminateProcess, waitForProcess)
+import System.Posix.Signals (Signal, signalProcess, sigTERM, sigKILL, sigINT, sigHUP, sigUSR1, sigUSR2)
+import System.Process (createProcess, proc, waitForProcess, getPid, ProcessHandle)
+import System.Posix.Types (CPid)
 
 data TimeoutOptions = TimeoutOptions
   { optForeground :: Bool,
@@ -77,16 +79,16 @@ parseArgs argv = case getOpt RequireOrder options argv of
       [] -> do
         hPutStrLn stderr "missing operand"
         hPutStrLn stderr "Try '--help' for more information."
-        exitFailure
+        exitWith (ExitFailure 125)
       [_] -> do
         hPutStrLn stderr "missing command"
         hPutStrLn stderr "Try '--help' for more information."
-        exitFailure
+        exitWith (ExitFailure 125)
       duration : cmd : args -> return (opts, duration, cmd, args)
   (_, _, errs) -> do
     hPutStrLn stderr (concat errs)
     hPutStrLn stderr "Try '--help' for more information."
-    exitFailure
+    exitWith (ExitFailure 125)
 
 showHelp :: IO ()
 showHelp = do
@@ -104,6 +106,27 @@ parseDuration s = case reads s of
   [(n, "h")] -> Just (n * 3600000000)
   [(n, "")] -> Just (n * 1000000)
   _ -> Nothing
+
+parseSignal :: String -> Maybe Signal
+parseSignal "TERM" = Just sigTERM
+parseSignal "KILL" = Just sigKILL
+parseSignal "INT" = Just sigINT
+parseSignal "HUP" = Just sigHUP
+parseSignal "USR1" = Just sigUSR1
+parseSignal "USR2" = Just sigUSR2
+parseSignal s = case reads s of
+  [(n :: Int, "")] -> Just (fromIntegral n)
+  _ -> Nothing
+
+-- Safe wrapper for getPid that throws a proper error on failure
+getProcessId :: ProcessHandle -> IO CPid
+getProcessId ph = do
+  mpid <- getPid ph
+  case mpid of
+    Just pid -> return pid
+    Nothing -> do
+      hPutStrLn stderr "Failed to get process ID"
+      exitWith (ExitFailure 125)
 
 main :: IO ()
 main = do
@@ -123,12 +146,20 @@ main = do
             Just micros -> do
               (_, _, _, ph) <- createProcess (proc cmd cmdArgs)
 
+              pid <- getProcessId ph
+
+              let signal = case optSignal opts of
+                    Just sigStr -> case parseSignal sigStr of
+                      Just sig -> sig
+                      Nothing -> sigTERM  -- Default to SIGTERM on parse failure
+                    Nothing -> sigTERM    -- Default signal
+
               timeoutOccurred <- newEmptyMVar
 
               _ <- forkIO $ do
                 threadDelay micros
                 putMVar timeoutOccurred True
-                terminateProcess ph
+                signalProcess signal pid
 
               exitCode <- waitForProcess ph
 
