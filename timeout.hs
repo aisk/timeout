@@ -2,8 +2,9 @@ module Main where
 
 import System.Console.GetOpt
 import System.Environment (getArgs, getProgName)
-import System.Exit (exitFailure, exitSuccess)
+import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
 import System.IO (hPutStrLn, stderr)
+import System.Process (createProcess, proc, waitForProcess)
 
 data TimeoutOptions = TimeoutOptions
   { optForeground :: Bool,
@@ -80,7 +81,7 @@ parseArgs argv = case getOpt RequireOrder options argv of
         hPutStrLn stderr "missing command"
         hPutStrLn stderr "Try '--help' for more information."
         exitFailure
-      duration:cmd:args -> return (opts, duration, cmd, args)
+      duration : cmd : args -> return (opts, duration, cmd, args)
   (_, _, errs) -> do
     hPutStrLn stderr (concat errs)
     hPutStrLn stderr "Try '--help' for more information."
@@ -106,7 +107,8 @@ main = do
       if optVersion opts
         then showVersion >> exitSuccess
         else do
-          putStrLn $ "Duration: " ++ duration
-          putStrLn $ "Command: " ++ cmd
-          putStrLn $ "Arguments: " ++ show cmdArgs
-          putStrLn $ "Options: " ++ show opts
+          (_, _, _, ph) <- createProcess (proc cmd cmdArgs)
+          exitCode <- waitForProcess ph
+          case exitCode of
+            ExitSuccess -> exitSuccess
+            ExitFailure code -> exitWith (ExitFailure code)
