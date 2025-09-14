@@ -3,7 +3,7 @@ ORMOLU := ormolu
 
 TARGET := timeout
 SRC := timeout.hs
-GHC_FLAGS := -dynamic -Wall
+GHC_FLAGS := -dynamic -threaded -Wall
 
 $(TARGET): $(SRC)
 	$(GHC) $(GHC_FLAGS) -o $@ $<

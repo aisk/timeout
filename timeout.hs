@@ -4,7 +4,8 @@ import System.Console.GetOpt
 import System.Environment (getArgs, getProgName)
 import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
 import System.IO (hPutStrLn, stderr)
-import System.Process (createProcess, proc, waitForProcess)
+import System.Process (createProcess, proc, waitForProcess, terminateProcess)
+import Control.Concurrent (forkIO, threadDelay)
 
 data TimeoutOptions = TimeoutOptions
   { optForeground :: Bool,
@@ -77,7 +78,7 @@ parseArgs argv = case getOpt RequireOrder options argv of
         hPutStrLn stderr "missing operand"
         hPutStrLn stderr "Try '--help' for more information."
         exitFailure
-      [duration] -> do
+      [_] -> do
         hPutStrLn stderr "missing command"
         hPutStrLn stderr "Try '--help' for more information."
         exitFailure
@@ -96,6 +97,14 @@ showHelp = do
 showVersion :: IO ()
 showVersion = putStrLn "timeout (Haskell implementation) 1.0"
 
+parseDuration :: String -> Maybe Int
+parseDuration s = case reads s of
+  [(n, "s")] -> Just (n * 1000000)
+  [(n, "m")] -> Just (n * 60000000)
+  [(n, "h")] -> Just (n * 3600000000)
+  [(n, "")] -> Just (n * 1000000)
+  _ -> Nothing
+
 main :: IO ()
 main = do
   args <- getArgs
@@ -107,8 +116,22 @@ main = do
       if optVersion opts
         then showVersion >> exitSuccess
         else do
-          (_, _, _, ph) <- createProcess (proc cmd cmdArgs)
-          exitCode <- waitForProcess ph
-          case exitCode of
-            ExitSuccess -> exitSuccess
-            ExitFailure code -> exitWith (ExitFailure code)
+          case parseDuration duration of
+            Nothing -> do
+              hPutStrLn stderr $ "invalid time interval: '" ++ duration ++ "'"
+              exitWith (ExitFailure 125)
+            Just micros -> do
+              (_, _, _, ph) <- createProcess (proc cmd cmdArgs)
+
+              -- Start timeout thread
+              _ <- forkIO $ do
+                threadDelay micros
+                terminateProcess ph
+
+              exitCode <- waitForProcess ph
+
+              -- Check if process was terminated by our timeout
+              case exitCode of
+                ExitSuccess -> exitSuccess
+                ExitFailure 15 -> exitWith (ExitFailure 124)  -- SIGTERM (timeout)
+                ExitFailure code -> exitWith (ExitFailure code)
