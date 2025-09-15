@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedRecordDot #-}
+
 module Main where
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, threadDelay, tryTakeMVar)
@@ -76,14 +77,16 @@ options =
 parseArgs :: [String] -> IO (TimeoutOptions, String, String, [String])
 parseArgs argv =
   let helpMsg = "\nTry '--help' for more information."
-  in case getOpt RequireOrder options argv of
-    (o, n, []) -> do
-      let opts = foldl (flip id) defaultOptions o
-      case n of
-        [] -> error $ "missing operand" ++ helpMsg
-        [_] -> error $ "missing command" ++ helpMsg
-        duration : cmd : args -> return (opts, duration, cmd, args)
-    (_, _, errs) -> error (concat errs ++ helpMsg)
+   in case getOpt RequireOrder options argv of
+        (o, n, []) -> do
+          let opts = foldl (flip id) defaultOptions o
+          if opts.help || opts.version
+            then return (opts, "", "", [])
+            else case n of
+              [] -> error $ "missing operand" ++ helpMsg
+              [_] -> error $ "missing command" ++ helpMsg
+              duration : cmd : args -> return (opts, duration, cmd, args)
+        (_, _, errs) -> error (concat errs ++ helpMsg)
 
 showHelp :: IO ()
 showHelp = do
