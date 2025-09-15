@@ -140,6 +140,12 @@ run = do
           case parseDuration duration of
             Nothing -> error $ "invalid time interval: '" ++ duration ++ "'"
             Just micros -> do
+              killMicros <- case optKillAfter opts of
+                Just killAfterDur ->
+                  case parseDuration killAfterDur of
+                    Nothing -> error $ "invalid time interval for kill-after: '" ++ killAfterDur ++ "'"
+                    Just micros -> return (Just micros)
+                Nothing -> return Nothing
               (_, _, _, ph) <- createProcess (proc cmd cmdArgs)
 
               pid <- getProcessId ph
@@ -151,6 +157,12 @@ run = do
                 threadDelay micros
                 putMVar timeoutOccurred True
                 signalProcess signal pid
+
+                case killMicros of
+                  Just micros -> do
+                    threadDelay micros
+                    signalProcess sigKILL pid
+                  Nothing -> return ()
 
               exitCode <- waitForProcess ph
 
