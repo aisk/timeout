@@ -93,13 +93,13 @@ showHelp = do
 showVersion :: IO ()
 showVersion = putStrLn "timeout (Haskell implementation) 0.0.1"
 
-parseDuration :: String -> Maybe Int
+parseDuration :: String -> IO Int
 parseDuration s = case reads s of
-  [(n, "s")] -> Just (n * 1000000)
-  [(n, "m")] -> Just (n * 60000000)
-  [(n, "h")] -> Just (n * 3600000000)
-  [(n, "")] -> Just (n * 1000000)
-  _ -> Nothing
+  [(n, "s")] -> return (n * 1000000)
+  [(n, "m")] -> return (n * 60000000)
+  [(n, "h")] -> return (n * 3600000000)
+  [(n, "")] -> return (n * 1000000)
+  _ -> error $ "invalid time interval: '" ++ s ++ "'\nTry '--help' for more information."
 
 parseSignal :: String -> Maybe Signal
 parseSignal "TERM" = Just sigTERM
@@ -137,44 +137,37 @@ run = do
       if optVersion opts
         then showVersion >> return ExitSuccess
         else do
-          case parseDuration duration of
-            Nothing -> error $ "invalid time interval: '" ++ duration ++ "'"
-            Just micros -> do
-              killMicros <- case optKillAfter opts of
-                Just killAfterDur ->
-                  case parseDuration killAfterDur of
-                    Nothing -> error $ "invalid time interval for kill-after: '" ++ killAfterDur ++ "'"
-                    Just micros -> return (Just micros)
-                Nothing -> return Nothing
-              (_, _, _, ph) <- createProcess (proc cmd cmdArgs)
+          micros <- parseDuration duration
+          killMicros <- maybe (return Nothing) (fmap Just . parseDuration) (optKillAfter opts)
+          (_, _, _, ph) <- createProcess (proc cmd cmdArgs)
 
-              pid <- getProcessId ph
+          pid <- getProcessId ph
 
-              let signal = determineSignal opts
-              timeoutOccurred <- newEmptyMVar
+          let signal = determineSignal opts
+          timeoutOccurred <- newEmptyMVar
 
-              _ <- forkIO $ do
-                threadDelay micros
-                putMVar timeoutOccurred True
-                signalProcess signal pid
+          _ <- forkIO $ do
+            threadDelay micros
+            putMVar timeoutOccurred True
+            signalProcess signal pid
 
-                case killMicros of
-                  Just micros -> do
-                    threadDelay micros
-                    signalProcess sigKILL pid
-                  Nothing -> return ()
+            case killMicros of
+              Just killDelay -> do
+                threadDelay killDelay
+                signalProcess sigKILL pid
+              Nothing -> return ()
 
-              exitCode <- waitForProcess ph
+          exitCode <- waitForProcess ph
 
-              timeoutHappened <- tryTakeMVar timeoutOccurred
+          timeoutHappened <- tryTakeMVar timeoutOccurred
 
-              case (timeoutHappened, exitCode) of
-                (Just True, _) ->
-                  if optPreserveStatus opts
-                    then return exitCode
-                    else return (ExitFailure 124)
-                (_, ExitSuccess) -> return ExitSuccess
-                (_, ExitFailure code) -> return (ExitFailure code)
+          case (timeoutHappened, exitCode) of
+            (Just True, _) ->
+              if optPreserveStatus opts
+                then return exitCode
+                else return (ExitFailure 124)
+            (_, ExitSuccess) -> return ExitSuccess
+            (_, ExitFailure code) -> return (ExitFailure code)
 
 main :: IO ()
 main = do
