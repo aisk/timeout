@@ -10,6 +10,14 @@ This project provides a standalone, lightweight `timeout` command implementation
 
 ## Installation
 
+### Via homebrew
+
+```bash
+brew install aisk/homebrew-tap/timeout
+```
+
+### From source
+
 ```bash
 make
 sudo cp timeout /usr/local/bin/
