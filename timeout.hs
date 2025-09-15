@@ -73,14 +73,16 @@ options =
   ]
 
 parseArgs :: [String] -> IO (TimeoutOptions, String, String, [String])
-parseArgs argv = case getOpt RequireOrder options argv of
-  (o, n, []) -> do
-    let opts = foldl (flip id) defaultOptions o
-    case n of
-      [] -> error "missing operand\nTry '--help' for more information."
-      [_] -> error "missing command\nTry '--help' for more information."
-      duration : cmd : args -> return (opts, duration, cmd, args)
-  (_, _, errs) -> error (concat errs ++ "\nTry '--help' for more information.")
+parseArgs argv =
+  let helpMsg = "\nTry '--help' for more information."
+  in case getOpt RequireOrder options argv of
+    (o, n, []) -> do
+      let opts = foldl (flip id) defaultOptions o
+      case n of
+        [] -> error $ "missing operand" ++ helpMsg
+        [_] -> error $ "missing command" ++ helpMsg
+        duration : cmd : args -> return (opts, duration, cmd, args)
+    (_, _, errs) -> error (concat errs ++ helpMsg)
 
 showHelp :: IO ()
 showHelp = do
@@ -110,13 +112,19 @@ parseSignal s = case reads s of
   [(n :: Int, "")] -> Just (fromIntegral n)
   _ -> Nothing
 
--- Safe wrapper for getPid that throws a proper error on failure
 getProcessId :: ProcessHandle -> IO CPid
 getProcessId ph = do
   mpid <- getPid ph
   case mpid of
     Just pid -> return pid
     Nothing -> error "Failed to get process ID"
+
+determineSignal :: TimeoutOptions -> Signal
+determineSignal opts = case optSignal opts of
+  Just sigStr -> case parseSignal sigStr of
+    Just sig -> sig
+    Nothing -> sigTERM
+  Nothing -> sigTERM
 
 run :: IO ExitCode
 run = do
@@ -136,11 +144,7 @@ run = do
 
               pid <- getProcessId ph
 
-              let signal = case optSignal opts of
-                    Just sigStr -> case parseSignal sigStr of
-                      Just sig -> sig
-                      Nothing -> sigTERM
-                    Nothing -> sigTERM
+              let signal = determineSignal opts
               timeoutOccurred <- newEmptyMVar
 
               _ <- forkIO $ do
