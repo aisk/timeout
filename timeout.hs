@@ -41,7 +41,7 @@ options =
       ['f']
       ["foreground"]
       (NoArg (\opts -> opts {foreground = True}))
-      "allow COMMAND to read from TTY and get TTY signals",
+      "allow COMMAND to read from TTY and get TTY signals (not yet supported)",
     Option
       ['k']
       ["kill-after"]
@@ -61,7 +61,7 @@ options =
       ['v']
       ["verbose"]
       (NoArg (\opts -> opts {verbose = True}))
-      "diagnose to stderr any signal sent",
+      "diagnose to stderr any signal sent (not yet supported)",
     Option
       []
       ["help"]
@@ -95,7 +95,7 @@ showHelp = do
   putStrLn (usageInfo header options)
 
 showVersion :: IO ()
-showVersion = putStrLn "timeout (Haskell implementation) 0.0.1"
+showVersion = putStrLn "timeout (Haskell implementation) 0.0.2"
 
 parseDuration :: String -> IO Int
 parseDuration s = case reads s of
