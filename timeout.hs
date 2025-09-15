@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedRecordDot #-}
 module Main where
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, threadDelay, tryTakeMVar)
@@ -11,26 +12,26 @@ import System.Posix.Types (CPid)
 import System.Process (ProcessHandle, createProcess, getPid, proc, waitForProcess)
 
 data TimeoutOptions = TimeoutOptions
-  { optForeground :: Bool,
-    optKillAfter :: Maybe String,
-    optPreserveStatus :: Bool,
-    optSignal :: Maybe String,
-    optVerbose :: Bool,
-    optHelp :: Bool,
-    optVersion :: Bool
+  { foreground :: Bool,
+    killAfter :: Maybe String,
+    preserveStatus :: Bool,
+    signal :: Maybe String,
+    verbose :: Bool,
+    help :: Bool,
+    version :: Bool
   }
   deriving (Show)
 
 defaultOptions :: TimeoutOptions
 defaultOptions =
   TimeoutOptions
-    { optForeground = False,
-      optKillAfter = Nothing,
-      optPreserveStatus = False,
-      optSignal = Nothing,
-      optVerbose = False,
-      optHelp = False,
-      optVersion = False
+    { foreground = False,
+      killAfter = Nothing,
+      preserveStatus = False,
+      signal = Nothing,
+      verbose = False,
+      help = False,
+      version = False
     }
 
 options :: [OptDescr (TimeoutOptions -> TimeoutOptions)]
@@ -38,37 +39,37 @@ options =
   [ Option
       ['f']
       ["foreground"]
-      (NoArg (\opts -> opts {optForeground = True}))
+      (NoArg (\opts -> opts {foreground = True}))
       "allow COMMAND to read from TTY and get TTY signals",
     Option
       ['k']
       ["kill-after"]
-      (ReqArg (\dur opts -> opts {optKillAfter = Just dur}) "DURATION")
+      (ReqArg (\dur opts -> opts {killAfter = Just dur}) "DURATION")
       "also send KILL signal after DURATION",
     Option
       ['p']
       ["preserve-status"]
-      (NoArg (\opts -> opts {optPreserveStatus = True}))
+      (NoArg (\opts -> opts {preserveStatus = True}))
       "exit with same status as COMMAND",
     Option
       ['s']
       ["signal"]
-      (ReqArg (\sig opts -> opts {optSignal = Just sig}) "SIGNAL")
+      (ReqArg (\sig opts -> opts {signal = Just sig}) "SIGNAL")
       "specify signal to send on timeout",
     Option
       ['v']
       ["verbose"]
-      (NoArg (\opts -> opts {optVerbose = True}))
+      (NoArg (\opts -> opts {verbose = True}))
       "diagnose to stderr any signal sent",
     Option
       []
       ["help"]
-      (NoArg (\opts -> opts {optHelp = True}))
+      (NoArg (\opts -> opts {help = True}))
       "display this help and exit",
     Option
       []
       ["version"]
-      (NoArg (\opts -> opts {optVersion = True}))
+      (NoArg (\opts -> opts {version = True}))
       "output version information and exit"
   ]
 
@@ -120,7 +121,7 @@ getProcessId ph = do
     Nothing -> error "Failed to get process ID"
 
 determineSignal :: TimeoutOptions -> Signal
-determineSignal opts = case optSignal opts of
+determineSignal opts = case opts.signal of
   Just sigStr -> case parseSignal sigStr of
     Just sig -> sig
     Nothing -> sigTERM
@@ -131,14 +132,14 @@ run = do
   args <- getArgs
   (opts, duration, cmd, cmdArgs) <- parseArgs args
 
-  if optHelp opts
+  if opts.help
     then showHelp >> return ExitSuccess
     else
-      if optVersion opts
+      if opts.version
         then showVersion >> return ExitSuccess
         else do
           micros <- parseDuration duration
-          killMicros <- maybe (return Nothing) (fmap Just . parseDuration) (optKillAfter opts)
+          killMicros <- maybe (return Nothing) (fmap Just . parseDuration) opts.killAfter
           (_, _, _, ph) <- createProcess (proc cmd cmdArgs)
 
           pid <- getProcessId ph
@@ -163,7 +164,7 @@ run = do
 
           case (timeoutHappened, exitCode) of
             (Just True, _) ->
-              if optPreserveStatus opts
+              if opts.preserveStatus
                 then return exitCode
                 else return (ExitFailure 124)
             (_, ExitSuccess) -> return ExitSuccess
