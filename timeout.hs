@@ -10,7 +10,7 @@ import System.Exit (ExitCode (..), exitWith)
 import System.IO (hPutStrLn, stderr)
 import System.Posix.Signals (Signal, sigHUP, sigINT, sigKILL, sigTERM, sigUSR1, sigUSR2, signalProcess)
 import System.Posix.Types (CPid)
-import System.Process (ProcessHandle, createProcess, getPid, proc, waitForProcess)
+import System.Process (CreateProcess (..), ProcessHandle, StdStream (..), createProcess, getPid, proc, std_err, std_in, std_out, waitForProcess)
 
 data TimeoutOptions = TimeoutOptions
   { foreground :: Bool,
@@ -41,7 +41,7 @@ options =
       ['f']
       ["foreground"]
       (NoArg (\opts -> opts {foreground = True}))
-      "allow COMMAND to read from TTY and get TTY signals (not yet supported)",
+      "allow COMMAND to read from TTY and get TTY signals",
     Option
       ['k']
       ["kill-after"]
@@ -143,7 +143,13 @@ run = do
         else do
           micros <- parseDuration duration
           killMicros <- maybe (return Nothing) (fmap Just . parseDuration) opts.killAfter
-          (_, _, _, ph) <- createProcess (proc cmd cmdArgs)
+
+          let processConfig =
+                if opts.foreground
+                  then (proc cmd cmdArgs) {std_in = Inherit, std_out = Inherit, std_err = Inherit}
+                  else proc cmd cmdArgs
+
+          (_, _, _, ph) <- createProcess processConfig
 
           pid <- getProcessId ph
 

@@ -45,4 +45,23 @@ else
     exit 1
 fi
 
+echo "Testing foreground option"
+echo "test input" | ./timeout -f 1s cat > /tmp/foreground_test.txt
+if [ "$(cat /tmp/foreground_test.txt)" = "test input" ]; then
+    echo "✓ Foreground option works with input/output"
+else
+    echo "✗ Foreground option failed"
+    exit 1
+fi
+
+# Test that foreground mode still respects timeout
+./timeout -f 1s sleep 3
+exit_code=$?
+if [ $exit_code -eq 124 ]; then
+    echo "✓ Foreground mode still respects timeout (exit: 124)"
+else
+    echo "✗ Foreground mode timeout failed (exit: $exit_code)"
+    exit 1
+fi
+
 echo "=== All tests completed ==="
