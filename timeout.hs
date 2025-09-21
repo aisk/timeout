@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Main where
 
@@ -100,10 +101,12 @@ showVersion = putStrLn "timeout (Haskell implementation) 0.0.2"
 
 parseDuration :: String -> IO Int
 parseDuration s = case reads s of
-  [(n, "s")] -> return (n * 1000000)
-  [(n, "m")] -> return (n * 60000000)
-  [(n, "h")] -> return (n * 3600000000)
-  [(n, "")] -> return (n * 1000000)
+  [(n :: Double, "ms")] -> return (round (n * 1000))
+  [(n :: Double, "s")] -> return (round (n * 1000000))
+  [(n :: Double, "m")] -> return (round (n * 60000000))
+  [(n :: Double, "h")] -> return (round (n * 3600000000))
+  [(n :: Double, "d")] -> return (round (n * 86400000000))
+  [(n :: Double, "")] -> return (round (n * 1000000))
   _ -> error $ "invalid time interval: '" ++ s ++ "'\nTry '--help' for more information."
 
 parseSignal :: String -> Maybe Signal
