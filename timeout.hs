@@ -3,7 +3,7 @@
 
 module Main where
 
-import Control.Concurrent (forkIO, newEmptyMVar, putMVar, threadDelay, tryTakeMVar)
+import Control.Concurrent (MVar, forkIO, newEmptyMVar, putMVar, threadDelay, tryTakeMVar)
 import Control.Exception (SomeException, catch)
 import Control.Monad (when)
 import System.Console.GetOpt
@@ -97,7 +97,7 @@ showHelp = do
   putStrLn (usageInfo header options)
 
 showVersion :: IO ()
-showVersion = putStrLn "timeout (Haskell implementation) 0.0.2"
+showVersion = putStrLn "timeout (Haskell implementation) 0.1.0"
 
 parseDuration :: String -> IO Int
 parseDuration s = case reads s of
@@ -134,6 +134,60 @@ determineSignal opts = case opts.signal of
     Nothing -> sigTERM
   Nothing -> sigTERM
 
+buildProcessConfig :: TimeoutOptions -> String -> [String] -> CreateProcess
+buildProcessConfig opts cmd cmdArgs =
+  if opts.foreground
+    then (proc cmd cmdArgs) {std_in = Inherit, std_out = Inherit, std_err = Inherit}
+    else proc cmd cmdArgs
+
+startProcess :: CreateProcess -> IO ProcessHandle
+startProcess processConfig = do
+  (_, _, _, ph) <- createProcess processConfig
+  return ph
+
+startTimeoutThread :: Int -> Maybe Int -> TimeoutOptions -> CPid -> MVar Bool -> IO ()
+startTimeoutThread micros killMicros opts pid timeoutOccurred = do
+  let signal = determineSignal opts
+  _ <- forkIO $ do
+    threadDelay micros
+    putMVar timeoutOccurred True
+    when opts.verbose $ hPutStrLn stderr $ "sending signal " ++ show signal ++ " to process " ++ show pid
+    signalProcess signal pid
+
+    case killMicros of
+      Just killDelay -> do
+        threadDelay killDelay
+        when opts.verbose $ hPutStrLn stderr $ "sending signal KILL to process " ++ show pid
+        signalProcess sigKILL pid
+      Nothing -> return ()
+  return ()
+
+handleExitCode :: TimeoutOptions -> Maybe Bool -> ExitCode -> ExitCode
+handleExitCode opts timeoutHappened exitCode = case (timeoutHappened, exitCode) of
+  (Just True, _) ->
+    if opts.preserveStatus
+      then exitCode
+      else ExitFailure 124
+  (_, ExitSuccess) -> ExitSuccess
+  (_, ExitFailure code) -> ExitFailure code
+
+runTimeout :: TimeoutOptions -> String -> String -> [String] -> IO ExitCode
+runTimeout opts duration cmd cmdArgs = do
+  micros <- parseDuration duration
+  killMicros <- maybe (return Nothing) (fmap Just . parseDuration) opts.killAfter
+
+  let processConfig = buildProcessConfig opts cmd cmdArgs
+  ph <- startProcess processConfig
+  pid <- getProcessId ph
+
+  timeoutOccurred <- newEmptyMVar
+  startTimeoutThread micros killMicros opts pid timeoutOccurred
+
+  exitCode <- waitForProcess ph
+  timeoutHappened <- tryTakeMVar timeoutOccurred
+
+  return $ handleExitCode opts timeoutHappened exitCode
+
 run :: IO ExitCode
 run = do
   args <- getArgs
@@ -144,46 +198,7 @@ run = do
     else
       if opts.version
         then showVersion >> return ExitSuccess
-        else do
-          micros <- parseDuration duration
-          killMicros <- maybe (return Nothing) (fmap Just . parseDuration) opts.killAfter
-
-          let processConfig =
-                if opts.foreground
-                  then (proc cmd cmdArgs) {std_in = Inherit, std_out = Inherit, std_err = Inherit}
-                  else proc cmd cmdArgs
-
-          (_, _, _, ph) <- createProcess processConfig
-
-          pid <- getProcessId ph
-
-          let signal = determineSignal opts
-          timeoutOccurred <- newEmptyMVar
-
-          _ <- forkIO $ do
-            threadDelay micros
-            putMVar timeoutOccurred True
-            when opts.verbose $ hPutStrLn stderr $ "sending signal " ++ show signal ++ " to process " ++ show pid
-            signalProcess signal pid
-
-            case killMicros of
-              Just killDelay -> do
-                threadDelay killDelay
-                when opts.verbose $ hPutStrLn stderr $ "sending signal KILL to process " ++ show pid
-                signalProcess sigKILL pid
-              Nothing -> return ()
-
-          exitCode <- waitForProcess ph
-
-          timeoutHappened <- tryTakeMVar timeoutOccurred
-
-          case (timeoutHappened, exitCode) of
-            (Just True, _) ->
-              if opts.preserveStatus
-                then return exitCode
-                else return (ExitFailure 124)
-            (_, ExitSuccess) -> return ExitSuccess
-            (_, ExitFailure code) -> return (ExitFailure code)
+        else runTimeout opts duration cmd cmdArgs
 
 main :: IO ()
 main = do
