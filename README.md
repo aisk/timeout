@@ -1,6 +1,6 @@
 # timeout - macOS Compatible timeout Command
 
-A lightweight Haskell implementation of the `timeout` command.
+A standalone implementation of the `timeout` command.
 
 ## Purpose
 
