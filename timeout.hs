@@ -4,6 +4,7 @@ module Main where
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, threadDelay, tryTakeMVar)
 import Control.Exception (SomeException, catch)
+import Control.Monad (when)
 import System.Console.GetOpt
 import System.Environment (getArgs, getProgName)
 import System.Exit (ExitCode (..), exitWith)
@@ -61,7 +62,7 @@ options =
       ['v']
       ["verbose"]
       (NoArg (\opts -> opts {verbose = True}))
-      "diagnose to stderr any signal sent (not yet supported)",
+      "diagnose to stderr any signal sent",
     Option
       []
       ["help"]
@@ -159,11 +160,13 @@ run = do
           _ <- forkIO $ do
             threadDelay micros
             putMVar timeoutOccurred True
+            when opts.verbose $ hPutStrLn stderr $ "sending signal " ++ show signal ++ " to process " ++ show pid
             signalProcess signal pid
 
             case killMicros of
               Just killDelay -> do
                 threadDelay killDelay
+                when opts.verbose $ hPutStrLn stderr $ "sending signal KILL to process " ++ show pid
                 signalProcess sigKILL pid
               Nothing -> return ()
 
