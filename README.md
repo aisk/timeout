@@ -1,4 +1,4 @@
-# timeout - macOS Compatible timeout Command
+# timeout - GNU Coreutils Compatible timeout Command
 
 A standalone implementation of the `timeout` command.
 
