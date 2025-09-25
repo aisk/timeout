@@ -193,12 +193,11 @@ run = do
   args <- getArgs
   (opts, duration, cmd, cmdArgs) <- parseArgs args
 
-  if opts.help
-    then showHelp >> return ExitSuccess
-    else
-      if opts.version
-        then showVersion >> return ExitSuccess
-        else runTimeout opts duration cmd cmdArgs
+  case () of
+    _
+      | opts.help -> showHelp >> return ExitSuccess
+      | opts.version -> showVersion >> return ExitSuccess
+      | otherwise -> runTimeout opts duration cmd cmdArgs
 
 main :: IO ()
 main = do
