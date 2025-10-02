@@ -14,6 +14,21 @@ import System.Posix.Signals (Signal, sigHUP, sigINT, sigKILL, sigTERM, sigUSR1, 
 import System.Posix.Types (CPid)
 import System.Process (CreateProcess (..), ProcessHandle, StdStream (..), createProcess, getPid, proc, std_err, std_in, std_out, waitForProcess)
 
+exitTimeout :: Int
+exitTimeout = 124
+
+exitTimeoutFailure :: Int
+exitTimeoutFailure = 125
+
+exitCommandNotExecutable :: Int
+exitCommandNotExecutable = 126
+
+exitCommandNotFound :: Int
+exitCommandNotFound = 127
+
+exitKilledByKillSignal :: Int
+exitKilledByKillSignal = 137
+
 data TimeoutOptions = TimeoutOptions
   { foreground :: Bool,
     killAfter :: Maybe String,
@@ -167,7 +182,7 @@ handleExitCode opts timeoutHappened exitCode = case (timeoutHappened, exitCode) 
   (Just True, _) ->
     if opts.preserveStatus
       then exitCode
-      else ExitFailure 124
+      else ExitFailure exitTimeout
   (_, ExitSuccess) -> ExitSuccess
   (_, ExitFailure code) -> ExitFailure code
 
@@ -204,5 +219,5 @@ main = do
   exitCode <-
     run `catch` \e -> do
       hPutStrLn stderr (show (e :: SomeException))
-      return (ExitFailure 125)
+      return (ExitFailure exitTimeoutFailure)
   exitWith exitCode
