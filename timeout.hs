@@ -124,16 +124,16 @@ parseDuration s = case reads s of
   [(n :: Double, "")] -> return (round (n * 1000000))
   _ -> error $ "invalid time interval: '" ++ s ++ "'\nTry '--help' for more information."
 
-parseSignal :: String -> Maybe Signal
-parseSignal "TERM" = Just sigTERM
-parseSignal "KILL" = Just sigKILL
-parseSignal "INT" = Just sigINT
-parseSignal "HUP" = Just sigHUP
-parseSignal "USR1" = Just sigUSR1
-parseSignal "USR2" = Just sigUSR2
+parseSignal :: String -> Signal
+parseSignal "TERM" = sigTERM
+parseSignal "KILL" = sigKILL
+parseSignal "INT" = sigINT
+parseSignal "HUP" = sigHUP
+parseSignal "USR1" = sigUSR1
+parseSignal "USR2" = sigUSR2
 parseSignal s = case reads s of
-  [(n :: Int, "")] -> Just (fromIntegral n)
-  _ -> Nothing
+  [(n :: Int, "")] -> fromIntegral n
+  _ -> error $ "invalid signal: '" ++ s ++ "'\nTry '--help' for more information."
 
 getProcessId :: ProcessHandle -> IO CPid
 getProcessId ph = do
@@ -143,11 +143,7 @@ getProcessId ph = do
     Nothing -> error "Failed to get process ID"
 
 determineSignal :: TimeoutOptions -> Signal
-determineSignal opts = case opts.signal of
-  Just sigStr -> case parseSignal sigStr of
-    Just sig -> sig
-    Nothing -> sigTERM
-  Nothing -> sigTERM
+determineSignal opts = maybe sigTERM parseSignal opts.signal
 
 buildProcessConfig :: TimeoutOptions -> String -> [String] -> CreateProcess
 buildProcessConfig opts cmd cmdArgs =
