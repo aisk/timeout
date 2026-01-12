@@ -184,27 +184,29 @@ handleExitCode opts timeoutHappened exitCode = case (timeoutHappened, exitCode) 
   (_, ExitFailure code) -> ExitFailure code
 
 runTimeout :: TimeoutOptions -> String -> String -> [String] -> IO ExitCode
-runTimeout opts duration cmd cmdArgs = do
-  micros <- parseDuration duration
-  killMicros <- maybe (return Nothing) (fmap Just . parseDuration) opts.killAfter
+runTimeout opts duration cmd cmdArgs =
+  do
+    micros <- parseDuration duration
+    killMicros <- maybe (return Nothing) (fmap Just . parseDuration) opts.killAfter
 
-  let processConfig = buildProcessConfig opts cmd cmdArgs
-  ph <- startProcess processConfig
-  pid <- getProcessId ph
+    let processConfig = buildProcessConfig opts cmd cmdArgs
+    ph <- startProcess processConfig
+    pid <- getProcessId ph
 
-  timeoutOccurred <- newEmptyMVar
-  startTimeoutThread micros killMicros opts pid timeoutOccurred
+    timeoutOccurred <- newEmptyMVar
+    startTimeoutThread micros killMicros opts pid timeoutOccurred
 
-  exitCode <- waitForProcess ph
-  timeoutHappened <- tryTakeMVar timeoutOccurred
+    exitCode <- waitForProcess ph
+    timeoutHappened <- tryTakeMVar timeoutOccurred
 
-  return $ handleExitCode opts timeoutHappened exitCode
-  `catch` \(e :: IOError) -> do
-    if isDoesNotExistError e
-      then return $ ExitFailure exitCommandNotFound
-      else if isPermissionError e
-        then return $ ExitFailure exitCommandNotExecutable
-        else return $ ExitFailure exitTimeoutFailure
+    return $ handleExitCode opts timeoutHappened exitCode
+    `catch` \(e :: IOError) -> do
+      if isDoesNotExistError e
+        then return $ ExitFailure exitCommandNotFound
+        else
+          if isPermissionError e
+            then return $ ExitFailure exitCommandNotExecutable
+            else return $ ExitFailure exitTimeoutFailure
 
 run :: IO ExitCode
 run = do
