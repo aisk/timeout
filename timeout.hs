@@ -163,13 +163,13 @@ startTimeoutThread micros killMicros opts pid timeoutOccurred = do
     threadDelay micros
     putMVar timeoutOccurred True
     when opts.verbose $ hPutStrLn stderr $ "sending signal " ++ show signal ++ " to process " ++ show pid
-    signalProcess signal pid
+    signalProcess signal pid `catch` \(_ :: SomeException) -> return ()
 
     case killMicros of
       Just killDelay -> do
         threadDelay killDelay
         when opts.verbose $ hPutStrLn stderr $ "sending signal KILL to process " ++ show pid
-        signalProcess sigKILL pid
+        signalProcess sigKILL pid `catch` \(_ :: SomeException) -> return ()
       Nothing -> return ()
   return ()
 
