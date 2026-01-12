@@ -64,4 +64,28 @@ else
     exit 1
 fi
 
+echo "Testing non-existent command"
+./timeout 1s nonexistent_command_xyz_abc 2>/dev/null
+exit_code=$?
+if [ $exit_code -eq 127 ]; then
+    echo "✓ Non-existent command returns 127"
+else
+    echo "✗ Non-existent command failed (exit: $exit_code, expected 127)"
+    exit 1
+fi
+
+echo "Testing non-executable command"
+echo "#!/bin/sh" > test_not_exec
+chmod a-x test_not_exec
+./timeout 1s ./test_not_exec 2>/dev/null
+exit_code=$?
+if [ $exit_code -eq 126 ]; then
+    echo "✓ Non-executable command returns 126"
+else
+    echo "✗ Non-executable command failed (exit: $exit_code, expected 126)"
+    rm -f test_not_exec
+    exit 1
+fi
+rm -f test_not_exec
+
 echo "=== All tests completed ==="

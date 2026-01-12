@@ -10,6 +10,7 @@ import System.Console.GetOpt
 import System.Environment (getArgs, getProgName)
 import System.Exit (ExitCode (..), exitWith)
 import System.IO (hPutStrLn, stderr)
+import System.IO.Error (isDoesNotExistError, isPermissionError)
 import System.Posix.Signals (Signal, sigHUP, sigINT, sigKILL, sigTERM, sigUSR1, sigUSR2, signalProcess)
 import System.Posix.Types (CPid)
 import System.Process (CreateProcess (..), ProcessHandle, StdStream (..), createProcess, getPid, proc, std_err, std_in, std_out, waitForProcess)
@@ -198,6 +199,12 @@ runTimeout opts duration cmd cmdArgs = do
   timeoutHappened <- tryTakeMVar timeoutOccurred
 
   return $ handleExitCode opts timeoutHappened exitCode
+  `catch` \(e :: IOError) -> do
+    if isDoesNotExistError e
+      then return $ ExitFailure exitCommandNotFound
+      else if isPermissionError e
+        then return $ ExitFailure exitCommandNotExecutable
+        else return $ ExitFailure exitTimeoutFailure
 
 run :: IO ExitCode
 run = do
