@@ -1,5 +1,9 @@
 # timeout - GNU Coreutils Compatible timeout Command
 
+![](https://repository-images.githubusercontent.com/1054909255/1301f2f4-d0bb-4a52-b940-7f072a2be467)
+
+*Image by [T5](https://weibo.com/579027700), source: https://www.pixiv.net/artworks/108988374*
+
 A standalone implementation of the `timeout` command.
 
 ## Purpose
