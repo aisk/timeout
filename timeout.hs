@@ -13,7 +13,7 @@ import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isDoesNotExistError, isPermissionError)
 import System.Posix.Signals (Signal, sigHUP, sigINT, sigKILL, sigTERM, sigUSR1, sigUSR2, signalProcess)
 import System.Posix.Types (CPid)
-import System.Process (CreateProcess (..), ProcessHandle, StdStream (..), createProcess, getPid, proc, std_err, std_in, std_out, waitForProcess)
+import System.Process (CreateProcess (..), ProcessHandle, StdStream (..), createProcess, getPid, getProcessExitCode, proc, std_err, std_in, std_out, waitForProcess)
 
 exitTimeout :: Int
 exitTimeout = 124
@@ -157,8 +157,8 @@ startProcess processConfig = do
   (_, _, _, ph) <- createProcess processConfig
   return ph
 
-startTimeoutThread :: Int -> Maybe Int -> TimeoutOptions -> CPid -> MVar Bool -> IO ()
-startTimeoutThread micros killMicros opts pid timeoutOccurred = do
+startTimeoutThread :: Int -> Maybe Int -> TimeoutOptions -> CPid -> ProcessHandle -> MVar Bool -> IO ()
+startTimeoutThread micros killMicros opts pid ph timeoutOccurred = do
   let signal = determineSignal opts
   _ <- forkIO $ do
     threadDelay micros
@@ -169,8 +169,12 @@ startTimeoutThread micros killMicros opts pid timeoutOccurred = do
     case killMicros of
       Just killDelay -> do
         threadDelay killDelay
-        when opts.verbose $ hPutStrLn stderr $ "sending signal KILL to process " ++ show pid
-        signalProcess sigKILL pid `catch` \(_ :: SomeException) -> return ()
+        mExitCode <- getProcessExitCode ph
+        case mExitCode of
+          Nothing -> do
+            when opts.verbose $ hPutStrLn stderr $ "sending signal KILL to process " ++ show pid
+            signalProcess sigKILL pid `catch` \(_ :: SomeException) -> return ()
+          Just _ -> return ()
       Nothing -> return ()
   return ()
 
@@ -194,7 +198,7 @@ runTimeout opts duration cmd cmdArgs =
     pid <- getProcessId ph
 
     timeoutOccurred <- newEmptyMVar
-    startTimeoutThread micros killMicros opts pid timeoutOccurred
+    startTimeoutThread micros killMicros opts pid ph timeoutOccurred
 
     exitCode <- waitForProcess ph
     timeoutHappened <- tryTakeMVar timeoutOccurred
