@@ -83,6 +83,18 @@ else
     exit 1
 fi
 
+echo "Testing additional and SIG-prefixed signal names"
+./timeout -s QUIT 0.1s sleep 1
+quit_exit_code=$?
+./timeout --preserve-status -s SIGTERM 0.1s sleep 1
+term_exit_code=$?
+if [ $quit_exit_code -eq 124 ] && [ $term_exit_code -eq 143 ]; then
+    echo "✓ Additional and SIG-prefixed signal names work"
+else
+    echo "✗ Signal name support failed (QUIT: $quit_exit_code, SIGTERM: $term_exit_code)"
+    exit 1
+fi
+
 echo "Testing kill-after exit status"
 ./timeout --kill-after=0.1s 0.1s sh -c "trap '' TERM; sleep 1"
 exit_code=$?

@@ -6,12 +6,46 @@ module Main where
 import Control.Concurrent (MVar, forkIO, newEmptyMVar, putMVar, swapMVar, threadDelay, tryTakeMVar)
 import Control.Exception (SomeException, catch)
 import Control.Monad (void, when)
+import Data.Char (toUpper)
+import Data.List (stripPrefix)
+import Data.Maybe (fromMaybe)
 import System.Console.GetOpt
 import System.Environment (getArgs, getProgName)
 import System.Exit (ExitCode (..), exitWith)
 import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isDoesNotExistError, isPermissionError)
-import System.Posix.Signals (Signal, sigCONT, sigHUP, sigINT, sigKILL, sigTERM, sigUSR1, sigUSR2, signalProcess, signalProcessGroup)
+import System.Posix.Signals
+  ( Signal,
+    sigABRT,
+    sigALRM,
+    sigBUS,
+    sigCHLD,
+    sigCONT,
+    sigFPE,
+    sigHUP,
+    sigILL,
+    sigINT,
+    sigKILL,
+    sigPIPE,
+    sigPROF,
+    sigQUIT,
+    sigSEGV,
+    sigSTOP,
+    sigSYS,
+    sigTERM,
+    sigTRAP,
+    sigTSTP,
+    sigTTIN,
+    sigTTOU,
+    sigURG,
+    sigUSR1,
+    sigUSR2,
+    sigVTALRM,
+    sigXCPU,
+    sigXFSZ,
+    signalProcess,
+    signalProcessGroup,
+  )
 import System.Posix.Types (CPid)
 import System.Process (CreateProcess (..), ProcessHandle, StdStream (..), createProcess, getPid, getProcessExitCode, proc, std_err, std_in, std_out, waitForProcess)
 
@@ -128,15 +162,40 @@ parseDuration s = case reads s of
   _ -> error $ "invalid time interval: '" ++ s ++ "'\nTry '--help' for more information."
 
 parseSignal :: String -> Signal
-parseSignal "TERM" = sigTERM
-parseSignal "KILL" = sigKILL
-parseSignal "INT" = sigINT
-parseSignal "HUP" = sigHUP
-parseSignal "USR1" = sigUSR1
-parseSignal "USR2" = sigUSR2
-parseSignal s = case reads s of
-  [(n :: Int, "")] -> fromIntegral n
-  _ -> error $ "invalid signal: '" ++ s ++ "'\nTry '--help' for more information."
+parseSignal s =
+  let upper = map toUpper s
+      name = fromMaybe upper (stripPrefix "SIG" upper)
+   in case name of
+        "ABRT" -> sigABRT
+        "ALRM" -> sigALRM
+        "BUS" -> sigBUS
+        "CHLD" -> sigCHLD
+        "CONT" -> sigCONT
+        "FPE" -> sigFPE
+        "HUP" -> sigHUP
+        "ILL" -> sigILL
+        "INT" -> sigINT
+        "KILL" -> sigKILL
+        "PIPE" -> sigPIPE
+        "PROF" -> sigPROF
+        "QUIT" -> sigQUIT
+        "SEGV" -> sigSEGV
+        "STOP" -> sigSTOP
+        "SYS" -> sigSYS
+        "TERM" -> sigTERM
+        "TRAP" -> sigTRAP
+        "TSTP" -> sigTSTP
+        "TTIN" -> sigTTIN
+        "TTOU" -> sigTTOU
+        "URG" -> sigURG
+        "USR1" -> sigUSR1
+        "USR2" -> sigUSR2
+        "VTALRM" -> sigVTALRM
+        "XCPU" -> sigXCPU
+        "XFSZ" -> sigXFSZ
+        _ -> case reads s of
+          [(n :: Int, "")] -> fromIntegral n
+          _ -> error $ "invalid signal: '" ++ s ++ "'\nTry '--help' for more information."
 
 getProcessId :: ProcessHandle -> IO CPid
 getProcessId ph = do
