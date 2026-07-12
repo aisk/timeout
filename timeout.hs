@@ -11,7 +11,7 @@ import System.Environment (getArgs, getProgName)
 import System.Exit (ExitCode (..), exitWith)
 import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isDoesNotExistError, isPermissionError)
-import System.Posix.Signals (Signal, sigHUP, sigINT, sigKILL, sigTERM, sigUSR1, sigUSR2, signalProcess)
+import System.Posix.Signals (Signal, sigHUP, sigINT, sigKILL, sigTERM, sigUSR1, sigUSR2, signalProcess, signalProcessGroup)
 import System.Posix.Types (CPid)
 import System.Process (CreateProcess (..), ProcessHandle, StdStream (..), createProcess, getPid, getProcessExitCode, proc, std_err, std_in, std_out, waitForProcess)
 
@@ -150,12 +150,18 @@ buildProcessConfig :: TimeoutOptions -> String -> [String] -> CreateProcess
 buildProcessConfig opts cmd cmdArgs =
   if opts.foreground
     then (proc cmd cmdArgs) {std_in = Inherit, std_out = Inherit, std_err = Inherit}
-    else proc cmd cmdArgs
+    else (proc cmd cmdArgs) {create_group = True}
 
 startProcess :: CreateProcess -> IO ProcessHandle
 startProcess processConfig = do
   (_, _, _, ph) <- createProcess processConfig
   return ph
+
+sendSignal :: TimeoutOptions -> Signal -> CPid -> IO ()
+sendSignal opts signal pid =
+  if opts.foreground
+    then signalProcess signal pid
+    else signalProcessGroup signal pid
 
 startTimeoutThread :: Int -> Maybe Int -> TimeoutOptions -> CPid -> ProcessHandle -> MVar Bool -> IO ()
 startTimeoutThread micros killMicros opts pid ph timeoutOccurred = do
@@ -164,7 +170,7 @@ startTimeoutThread micros killMicros opts pid ph timeoutOccurred = do
     threadDelay micros
     putMVar timeoutOccurred True
     when opts.verbose $ hPutStrLn stderr $ "sending signal " ++ show signal ++ " to process " ++ show pid
-    signalProcess signal pid `catch` \(_ :: SomeException) -> return ()
+    sendSignal opts signal pid `catch` \(_ :: SomeException) -> return ()
 
     case killMicros of
       Just killDelay -> do
@@ -173,7 +179,7 @@ startTimeoutThread micros killMicros opts pid ph timeoutOccurred = do
         case mExitCode of
           Nothing -> do
             when opts.verbose $ hPutStrLn stderr $ "sending signal KILL to process " ++ show pid
-            signalProcess sigKILL pid `catch` \(_ :: SomeException) -> return ()
+            sendSignal opts sigKILL pid `catch` \(_ :: SomeException) -> return ()
           Just _ -> return ()
       Nothing -> return ()
   return ()

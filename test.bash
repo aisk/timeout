@@ -35,6 +35,20 @@ else
     exit 1
 fi
 
+echo "Testing timeout terminates descendant processes"
+marker="/tmp/timeout_process_group_$$"
+rm -f "$marker"
+./timeout 0.1s sh -c "(sleep 0.3; touch '$marker') & wait"
+exit_code=$?
+sleep 0.4
+if [ $exit_code -eq 124 ] && [ ! -e "$marker" ]; then
+    echo "✓ Timeout terminated descendant processes"
+else
+    echo "✗ Descendant process survived timeout"
+    rm -f "$marker"
+    exit 1
+fi
+
 echo "Testing preserve-status option"
 ./timeout -p 1s echo "test"
 exit_code=$?
