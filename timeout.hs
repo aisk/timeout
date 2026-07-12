@@ -191,14 +191,15 @@ runTimeout :: TimeoutOptions -> String -> String -> [String] -> IO ExitCode
 runTimeout opts duration cmd cmdArgs =
   do
     micros <- parseDuration duration
-    killMicros <- maybe (return Nothing) (fmap Just . parseDuration) opts.killAfter
+    parsedKillMicros <- maybe (return Nothing) (fmap Just . parseDuration) opts.killAfter
+    let killMicros = parsedKillMicros >>= \delay -> if delay == 0 then Nothing else Just delay
 
     let processConfig = buildProcessConfig opts cmd cmdArgs
     ph <- startProcess processConfig
     pid <- getProcessId ph
 
     timeoutOccurred <- newEmptyMVar
-    startTimeoutThread micros killMicros opts pid ph timeoutOccurred
+    when (micros /= 0) $ startTimeoutThread micros killMicros opts pid ph timeoutOccurred
 
     exitCode <- waitForProcess ph
     timeoutHappened <- tryTakeMVar timeoutOccurred

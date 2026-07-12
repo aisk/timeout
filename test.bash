@@ -15,6 +15,16 @@ echo "Testing normal command execution"
 ./timeout 1s echo "Hello world"
 echo "✓ Normal command execution works"
 
+echo "Testing zero duration disables timeout"
+./timeout 0 sh -c 'sleep 0.1; exit 7'
+exit_code=$?
+if [ $exit_code -eq 7 ]; then
+    echo "✓ Zero duration disables timeout (exit: 7)"
+else
+    echo "✗ Zero duration failed (exit: $exit_code, expected 7)"
+    exit 1
+fi
+
 echo "Testing timeout with sleep"
 ./timeout 1s sleep 3
 exit_code=$?
