@@ -11,7 +11,7 @@ import System.Environment (getArgs, getProgName)
 import System.Exit (ExitCode (..), exitWith)
 import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isDoesNotExistError, isPermissionError)
-import System.Posix.Signals (Signal, sigHUP, sigINT, sigKILL, sigTERM, sigUSR1, sigUSR2, signalProcess, signalProcessGroup)
+import System.Posix.Signals (Signal, sigCONT, sigHUP, sigINT, sigKILL, sigTERM, sigUSR1, sigUSR2, signalProcess, signalProcessGroup)
 import System.Posix.Types (CPid)
 import System.Process (CreateProcess (..), ProcessHandle, StdStream (..), createProcess, getPid, getProcessExitCode, proc, std_err, std_in, std_out, waitForProcess)
 
@@ -163,6 +163,11 @@ sendSignal opts signal pid =
     then signalProcess signal pid
     else signalProcessGroup signal pid
 
+sendTimeoutSignal :: TimeoutOptions -> Signal -> CPid -> IO ()
+sendTimeoutSignal opts signal pid = do
+  sendSignal opts signal pid
+  when (signal /= sigKILL && signal /= sigCONT) $ sendSignal opts sigCONT pid
+
 startTimeoutThread :: Int -> Maybe Int -> TimeoutOptions -> CPid -> ProcessHandle -> MVar Bool -> IO ()
 startTimeoutThread micros killMicros opts pid ph timeoutOccurred = do
   let signal = determineSignal opts
@@ -170,7 +175,7 @@ startTimeoutThread micros killMicros opts pid ph timeoutOccurred = do
     threadDelay micros
     putMVar timeoutOccurred True
     when opts.verbose $ hPutStrLn stderr $ "sending signal " ++ show signal ++ " to process " ++ show pid
-    sendSignal opts signal pid `catch` \(_ :: SomeException) -> return ()
+    sendTimeoutSignal opts signal pid `catch` \(_ :: SomeException) -> return ()
 
     case killMicros of
       Just killDelay -> do

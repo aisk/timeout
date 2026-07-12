@@ -49,6 +49,20 @@ else
     exit 1
 fi
 
+echo "Testing timeout resumes stopped processes after signaling"
+marker="/tmp/timeout_sigcont_$$"
+rm -f "$marker"
+./timeout --kill-after=0.2s 0.1s sh -c "trap 'touch $marker; exit 0' TERM; kill -STOP \$\$; sleep 1"
+exit_code=$?
+if [ $exit_code -eq 124 ] && [ -e "$marker" ]; then
+    echo "✓ Timeout resumed stopped process to handle signal"
+else
+    echo "✗ Stopped process did not handle timeout signal"
+    rm -f "$marker"
+    exit 1
+fi
+rm -f "$marker"
+
 echo "Testing preserve-status option"
 ./timeout -p 1s echo "test"
 exit_code=$?
