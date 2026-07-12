@@ -83,6 +83,16 @@ else
     exit 1
 fi
 
+echo "Testing kill-after exit status"
+./timeout --kill-after=0.1s 0.1s sh -c "trap '' TERM; sleep 1"
+exit_code=$?
+if [ $exit_code -eq 137 ]; then
+    echo "✓ Kill-after returned SIGKILL status (exit: 137)"
+else
+    echo "✗ Kill-after failed (exit: $exit_code, expected 137)"
+    exit 1
+fi
+
 echo "Testing foreground option"
 echo "test input" | ./timeout -f 1s cat > /tmp/foreground_test.txt
 if [ "$(cat /tmp/foreground_test.txt)" = "test input" ]; then

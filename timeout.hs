@@ -3,9 +3,9 @@
 
 module Main where
 
-import Control.Concurrent (MVar, forkIO, newEmptyMVar, putMVar, threadDelay, tryTakeMVar)
+import Control.Concurrent (MVar, forkIO, newEmptyMVar, putMVar, swapMVar, threadDelay, tryTakeMVar)
 import Control.Exception (SomeException, catch)
-import Control.Monad (when)
+import Control.Monad (void, when)
 import System.Console.GetOpt
 import System.Environment (getArgs, getProgName)
 import System.Exit (ExitCode (..), exitWith)
@@ -40,6 +40,8 @@ data TimeoutOptions = TimeoutOptions
     version :: Bool
   }
   deriving (Show)
+
+data TimeoutStatus = TimedOut | KilledAfterTimeout
 
 defaultOptions :: TimeoutOptions
 defaultOptions =
@@ -168,12 +170,12 @@ sendTimeoutSignal opts signal pid = do
   sendSignal opts signal pid
   when (signal /= sigKILL && signal /= sigCONT) $ sendSignal opts sigCONT pid
 
-startTimeoutThread :: Int -> Maybe Int -> TimeoutOptions -> CPid -> ProcessHandle -> MVar Bool -> IO ()
+startTimeoutThread :: Int -> Maybe Int -> TimeoutOptions -> CPid -> ProcessHandle -> MVar TimeoutStatus -> IO ()
 startTimeoutThread micros killMicros opts pid ph timeoutOccurred = do
   let signal = determineSignal opts
   _ <- forkIO $ do
     threadDelay micros
-    putMVar timeoutOccurred True
+    putMVar timeoutOccurred TimedOut
     when opts.verbose $ hPutStrLn stderr $ "sending signal " ++ show signal ++ " to process " ++ show pid
     sendTimeoutSignal opts signal pid `catch` \(_ :: SomeException) -> return ()
 
@@ -184,14 +186,16 @@ startTimeoutThread micros killMicros opts pid ph timeoutOccurred = do
         case mExitCode of
           Nothing -> do
             when opts.verbose $ hPutStrLn stderr $ "sending signal KILL to process " ++ show pid
+            void $ swapMVar timeoutOccurred KilledAfterTimeout
             sendSignal opts sigKILL pid `catch` \(_ :: SomeException) -> return ()
           Just _ -> return ()
       Nothing -> return ()
   return ()
 
-handleExitCode :: TimeoutOptions -> Maybe Bool -> ExitCode -> ExitCode
+handleExitCode :: TimeoutOptions -> Maybe TimeoutStatus -> ExitCode -> ExitCode
 handleExitCode opts timeoutHappened exitCode = case (timeoutHappened, exitCode) of
-  (Just True, _) ->
+  (Just KilledAfterTimeout, _) -> ExitFailure exitKilledByKillSignal
+  (Just TimedOut, _) ->
     if opts.preserveStatus
       then exitCode
       else ExitFailure exitTimeout
