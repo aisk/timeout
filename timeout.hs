@@ -14,38 +14,7 @@ import System.Environment (getArgs, getProgName)
 import System.Exit (ExitCode (..), exitWith)
 import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isDoesNotExistError, isPermissionError)
-import System.Posix.Signals
-  ( Signal,
-    sigABRT,
-    sigALRM,
-    sigBUS,
-    sigCHLD,
-    sigCONT,
-    sigFPE,
-    sigHUP,
-    sigILL,
-    sigINT,
-    sigKILL,
-    sigPIPE,
-    sigPROF,
-    sigQUIT,
-    sigSEGV,
-    sigSTOP,
-    sigSYS,
-    sigTERM,
-    sigTRAP,
-    sigTSTP,
-    sigTTIN,
-    sigTTOU,
-    sigURG,
-    sigUSR1,
-    sigUSR2,
-    sigVTALRM,
-    sigXCPU,
-    sigXFSZ,
-    signalProcess,
-    signalProcessGroup,
-  )
+import qualified System.Posix.Signals as Signals
 import System.Posix.Types (CPid)
 import System.Process (CreateProcess (..), ProcessHandle, StdStream (..), createProcess, getPid, getProcessExitCode, proc, std_err, std_in, std_out, waitForProcess)
 
@@ -161,38 +130,38 @@ parseDuration s = case reads s of
   [(n :: Double, "")] -> return (round (n * 1000000))
   _ -> error $ "invalid time interval: '" ++ s ++ "'\nTry '--help' for more information."
 
-parseSignal :: String -> Signal
+parseSignal :: String -> Signals.Signal
 parseSignal s =
   let upper = map toUpper s
       name = fromMaybe upper (stripPrefix "SIG" upper)
    in case name of
-        "ABRT" -> sigABRT
-        "ALRM" -> sigALRM
-        "BUS" -> sigBUS
-        "CHLD" -> sigCHLD
-        "CONT" -> sigCONT
-        "FPE" -> sigFPE
-        "HUP" -> sigHUP
-        "ILL" -> sigILL
-        "INT" -> sigINT
-        "KILL" -> sigKILL
-        "PIPE" -> sigPIPE
-        "PROF" -> sigPROF
-        "QUIT" -> sigQUIT
-        "SEGV" -> sigSEGV
-        "STOP" -> sigSTOP
-        "SYS" -> sigSYS
-        "TERM" -> sigTERM
-        "TRAP" -> sigTRAP
-        "TSTP" -> sigTSTP
-        "TTIN" -> sigTTIN
-        "TTOU" -> sigTTOU
-        "URG" -> sigURG
-        "USR1" -> sigUSR1
-        "USR2" -> sigUSR2
-        "VTALRM" -> sigVTALRM
-        "XCPU" -> sigXCPU
-        "XFSZ" -> sigXFSZ
+        "ABRT" -> Signals.sigABRT
+        "ALRM" -> Signals.sigALRM
+        "BUS" -> Signals.sigBUS
+        "CHLD" -> Signals.sigCHLD
+        "CONT" -> Signals.sigCONT
+        "FPE" -> Signals.sigFPE
+        "HUP" -> Signals.sigHUP
+        "ILL" -> Signals.sigILL
+        "INT" -> Signals.sigINT
+        "KILL" -> Signals.sigKILL
+        "PIPE" -> Signals.sigPIPE
+        "PROF" -> Signals.sigPROF
+        "QUIT" -> Signals.sigQUIT
+        "SEGV" -> Signals.sigSEGV
+        "STOP" -> Signals.sigSTOP
+        "SYS" -> Signals.sigSYS
+        "TERM" -> Signals.sigTERM
+        "TRAP" -> Signals.sigTRAP
+        "TSTP" -> Signals.sigTSTP
+        "TTIN" -> Signals.sigTTIN
+        "TTOU" -> Signals.sigTTOU
+        "URG" -> Signals.sigURG
+        "USR1" -> Signals.sigUSR1
+        "USR2" -> Signals.sigUSR2
+        "VTALRM" -> Signals.sigVTALRM
+        "XCPU" -> Signals.sigXCPU
+        "XFSZ" -> Signals.sigXFSZ
         _ -> case reads s of
           [(n :: Int, "")] -> fromIntegral n
           _ -> error $ "invalid signal: '" ++ s ++ "'\nTry '--help' for more information."
@@ -204,8 +173,8 @@ getProcessId ph = do
     Just pid -> return pid
     Nothing -> error "Failed to get process ID"
 
-determineSignal :: TimeoutOptions -> Signal
-determineSignal opts = maybe sigTERM parseSignal opts.signal
+determineSignal :: TimeoutOptions -> Signals.Signal
+determineSignal opts = maybe Signals.sigTERM parseSignal opts.signal
 
 buildProcessConfig :: TimeoutOptions -> String -> [String] -> CreateProcess
 buildProcessConfig opts cmd cmdArgs =
@@ -218,16 +187,16 @@ startProcess processConfig = do
   (_, _, _, ph) <- createProcess processConfig
   return ph
 
-sendSignal :: TimeoutOptions -> Signal -> CPid -> IO ()
+sendSignal :: TimeoutOptions -> Signals.Signal -> CPid -> IO ()
 sendSignal opts signal pid =
   if opts.foreground
-    then signalProcess signal pid
-    else signalProcessGroup signal pid
+    then Signals.signalProcess signal pid
+    else Signals.signalProcessGroup signal pid
 
-sendTimeoutSignal :: TimeoutOptions -> Signal -> CPid -> IO ()
+sendTimeoutSignal :: TimeoutOptions -> Signals.Signal -> CPid -> IO ()
 sendTimeoutSignal opts signal pid = do
   sendSignal opts signal pid
-  when (signal /= sigKILL && signal /= sigCONT) $ sendSignal opts sigCONT pid
+  when (signal /= Signals.sigKILL && signal /= Signals.sigCONT) $ sendSignal opts Signals.sigCONT pid
 
 startTimeoutThread :: Int -> Maybe Int -> TimeoutOptions -> CPid -> ProcessHandle -> MVar TimeoutStatus -> IO ()
 startTimeoutThread micros killMicros opts pid ph timeoutOccurred = do
@@ -246,7 +215,7 @@ startTimeoutThread micros killMicros opts pid ph timeoutOccurred = do
           Nothing -> do
             when opts.verbose $ hPutStrLn stderr $ "sending signal KILL to process " ++ show pid
             void $ swapMVar timeoutOccurred KilledAfterTimeout
-            sendSignal opts sigKILL pid `catch` \(_ :: SomeException) -> return ()
+            sendSignal opts Signals.sigKILL pid `catch` \(_ :: SomeException) -> return ()
           Just _ -> return ()
       Nothing -> return ()
   return ()
