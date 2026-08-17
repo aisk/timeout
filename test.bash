@@ -95,6 +95,20 @@ else
     exit 1
 fi
 
+echo "Testing inherited SIGHUP ignore is kept"
+nohup ./timeout 2s sleep 0.5 >/dev/null 2>&1 &
+timeout_pid=$!
+sleep 0.2
+kill -HUP $timeout_pid
+wait $timeout_pid
+exit_code=$?
+if [ $exit_code -eq 0 ]; then
+    echo "✓ Inherited SIGHUP ignore is kept"
+else
+    echo "✗ SIGHUP was not ignored under nohup (exit: $exit_code)"
+    exit 1
+fi
+
 echo "Testing kill-after exit status"
 ./timeout --kill-after=0.1s 0.1s sh -c "trap '' TERM; sleep 1"
 exit_code=$?
