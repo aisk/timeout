@@ -95,6 +95,15 @@ else
     exit 1
 fi
 
+echo "Testing RTS options are passed to the command"
+output=$(GHCRTS=-s ./timeout 1s echo +RTS -s --RTS 2>&1)
+if [ "$output" = "+RTS -s --RTS" ]; then
+    echo "✓ RTS options are passed to the command"
+else
+    echo "✗ RTS options were not passed through (output: $output)"
+    exit 1
+fi
+
 echo "Testing inherited SIGHUP ignore is kept"
 nohup ./timeout 2s sleep 0.5 >/dev/null 2>&1 &
 timeout_pid=$!
